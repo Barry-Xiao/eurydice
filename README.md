@@ -1,2 +1,2 @@
 # eurydice
-Utilities for the ECHO microbiome Project
+Utilities for microbiome data in the ECHO study
