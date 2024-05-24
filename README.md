@@ -1,2 +1,2 @@
 # eurydice
-Utilities for microbiome data in the ECHO study
+Python Utilities for microbiome data in the ECHO study
