@@ -1,0 +1,145 @@
+---
+title: "Rubins Data Reference"
+output: html_notebook
+---
+This is based on work by David Diasbato, [originally published in 2021 on his blog](http://www.daviddisabato.com/blog/2021/2/13/analyzing-and-pooling-
+        results-from-multiply-imputed-data).
+I used his original code to test imputation across packages and modified it to 
+create a python test data set for imputation with known variables.
+
+Please refer to the original coode for more information and an actual description
+of the steps.
+
+```{r}
+suppressPackageStartupMessages(library(mice))
+library(str2str)
+set.seed(01042021) # set seed so the imputed data are the same every time
+ampute_obj <- ampute(data = attitude, prop = .50, bycases = TRUE)
+attitude_na <- ampute_obj[["amp"]]
+print(attitude_na)
+```
+
+```{r}
+mice_obj <- mice(attitude_na, m = 5, method = "norm", printFlag = FALSE)
+mice_fit <- with(mice_obj, lm(rating ~ complaints + privileges + learning + raises + critical + advance))
+```
+And then we'll pool the MICE fit
+```{r}
+pool.fit <- pool(mice_fit)
+summary(pool.fit)
+```
+
+```{r}
+attitude_imp <- complete(mice_obj, action = "all", include = FALSE)
+```
+
+```{r}
+for(i in 1:5){
+  write.csv(
+    attitude_imp[[i]],
+    paste('~/Desktop/mice_test/impute_', i, '.csv', sep=''))
+}
+```
+
+```{r}
+frm <- 'rating ~ complaints + privileges + learning + raises + critical + advance'
+```
+
+And then we fit each regression
+
+```{r}
+lm_imp <- lapply(X = attitude_imp, FUN = function(dat) lm(frm, data = dat))
+```
+
+```{r}
+lapply(X = lm_imp[1:3], FUN = summary) 
+```
+
+```{r}
+coef_imp <- lapply(X = lm_imp, FUN = coef)
+coef_imp
+```
+```{r}
+vcov_imp <- lapply(X = lm_imp, FUN = vcov) 
+```
+```{r}
+for(i in 1:5){
+  write.csv(vcov_imp[[i]],
+            paste('~/Desktop/mice_test/vcov_', i, '.csv', sep=''))
+}
+```
+
+```{r}
+coef_mat <- lv2m(coef_imp, along = 1)
+print(coef_mat[1:3, ])
+```
+
+```{r}
+vcov_ary <- lm2a(vcov_imp)
+print(vcov_ary[,, 1:3])
+```
+
+```{r}
+coef_pool <- colMeans(coef_mat)
+print(coef_pool)
+```
+
+```{r}
+cov.w <- apply(X = vcov_ary, MARGIN = c(1,2), FUN = mean)
+cov.w
+```
+
+
+```{r}
+coef_dev <- coef_mat - matrix(coef_pool, byrow = TRUE, nrow = nrow(coef_mat),
+ncol = ncol(coef_mat))
+coef_dev2 <- t(coef_dev) %*% coef_dev
+dimnames(coef_dev2) <- dimnames(cov.w)
+m <- nlay(vcov_ary)
+missing_data <- coef_dev2 / (m - 1)
+print(missing_data)
+```
+```{r}
+finite_simulation <- missing_data / m
+print(finite_simulation)
+```
+
+```{r}
+total_error <- cov.w + missing_data + finite_simulation
+print(total_error)
+```
+
+```{r}
+fmi <- (diag(missing_data) + diag(finite_simulation)) / diag(total_error)
+print(fmi)
+```
+
+```{r}
+df_com <- df.residual(lm_imp[[1]])
+v <- (m - 1) / fmi^2
+vhat <- (1 - fmi) * ((df_com + 1) / (df_com + 3)) * df_com
+df_imp <- (v^(-1) + vhat^(-1))^(-1)
+print(df_imp)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

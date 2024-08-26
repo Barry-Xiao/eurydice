@@ -1,0 +1,169 @@
+---
+title: "Adonis Pooling test"
+output: html_notebook
+---
+
+The goal of this notebook is to assemble a reference beta diveristy data set
+with multiple imputed adonis results that can be imported into python for 
+multiple imputation because I dont hate myself enough to try and implement 
+the pooled coeffecient in R.
+
+To generate this notebook, I used data from a study by Vangay et al, whcih looked at immigration.
+
+```{r}
+library(mice)
+library(tidyverse)
+library(vegan)
+```
+We'll start by loading the metadata 
+
+```{r}
+meta <- read.table('~/Documents/06.Teaching/datasets/studies/thai_immigration/data2/qiime2_results/qiita-metadata.tsv',
+                   sep='\t', 
+                   colClasses = 'character',
+                   header = TRUE
+                   ) %>%
+  as_tibble() %>%
+  mutate_all(., ~replace(., . == '', NA)) %>%
+  mutate(., sample.id = paste('12080', sample.id, sep='.')
+          , age = as.numeric(age)
+          , age_at_arrival = as.numeric(age_at_arrival)
+          , years_in_us = as.numeric(years_in_us)
+          ) %>%
+  filter(., sample_group != 'Control') %>%
+  filter(., !is.na(alcohol_use))
+```
+
+```{r}
+meta %>% 
+  mutate_all(., ~is.na(.) * 1) %>%
+  summarise(across(everything(), sum)) %>%
+  pivot_longer(cols=everything()) %>%
+  arrange(value)
+```
+```{r}
+set.seed(1234)
+sub.list <- sample(meta$sample.id, replace = FALSE, size = 250)
+sub.meta <- meta %>%
+  filter(., sample.id %in% sub.list) %>%
+  select(c(sample.id, age, ethnicity, bmi_class, alcohol_use, birth_country)) %>%
+  mutate(., alcohol_use = replace(alcohol_use, alcohol_use == 'Daily', 'Weekly')) %>%
+  mutate(., alcohol_use = replace(alcohol_use, alcohol_use == 'Quit', 'Never'))
+```
+
+And then we'll load the distance matrix
+
+```{r}
+# Reads in the distance matrix and 
+dm.df <- read.table('~/Documents/06.Teaching/datasets/studies/thai_immigration/data2/qiime2_results/braycurtis_unrarefied.tsv',
+                 sep='\t',
+                 row.names = 1,
+                 header = TRUE)
+colnames(dm.df) <- row.names(dm.df)
+dm.df <- dm.df[sub.meta$sample.id, sub.meta$sample.id]
+
+dm.dist <- as.dist(dm.df)
+```
+
+# Reference fit
+
+I want to start by fitting a simple model that doesnt have any imputation in it
+and seeing waht numbers we get without imputation
+
+```{r}
+no.imp <- adonis2(dm.dist ~ age + ethnicity + bmi_class + alcohol_use + birth_country, data=sub.meta)
+no.imp
+```
+
+```{r}
+summarize.adonis <- function(res){
+  summary <- data.frame(name = attributes(res)[['row.names']],
+                        df = res$Df,
+                        SumOfSquares=res$SumOfSqs,
+                        r2 = res$R2,
+                        stat = res$F,
+                        pval = res$`Pr(>F)`,
+                        var_order = 1:length(res$SumOfSqs)) %>%
+    mutate(., var_order = replace(var_order, name %in% c('Total'), NA))
+  return(summary)
+}
+summarize.adonis(no.imp)
+```
+
+And then we'll try removing observations from the metadata for MICE. I want to 
+start fairly conservatively, so maybe let's pull out 5% of the observations
+from everything expect sample ID.
+
+```{r}
+meta.miss.amp <- sub.meta %>%
+  column_to_rownames('sample.id') %>%
+  mutate(., ethnicity = (ethnicity == 'Karen') * 1
+          , bmi_class = case_when(bmi_class %in% c('Normal') ~ 0,
+                                  bmi_class %in% c('Overweight') ~ 1,
+                                  bmi_class %in% c('Obese') ~ 2)
+          , alcohol_use = case_when(alcohol_use == 'Never' ~ 0,
+                                    alcohol_use == 'Monthly' ~ 1,
+                                    alcohol_use == 'Occasionally' ~ 2,
+                                    alcohol_use == 'Weekly' ~ 3)
+         , birth_country = case_when(birth_country == 'Mynmar' ~ 0,
+                                     birth_country == 'Thailand' ~ 1,
+                                     birth_country == 'Laos' ~ 2,
+                                     birth_country == 'USA' ~ 3)
+          ) %>%
+  ampute(., prop=0.1)
+
+meta.miss <- meta.miss.amp[['amp']] %>% 
+#  rownames_to_column('sample.id') %>%
+    mutate(., ethnicity = as.factor(ethnicity)
+            , bmi_class = as.factor(bmi_class)
+            , alcohol_use = as.factor(alcohol_use)
+            , birth_country = as.factor(birth_country))
+```
+
+Let's check the imputation worked
+
+```{r}
+meta.miss %>%
+  mutate_all(., ~is.na(.)) %>%
+  summarise(across(everything(), sum)) %>%
+  pivot_longer(., cols=everything())
+```
+
+Now we're going to generate a series of imputed data sets using MICE.
+
+```{r}
+mice.imp <- mice(meta.miss, m=10, printFlag = FALSE)
+mice.imp
+```
+And then we can pull off the list of data sets.
+```{r}
+mice.complete <- complete(mice.imp, action = "all", include = FALSE)
+```
+
+And then we'll run the adonis on each model and summarize it.
+
+```{r}
+adonis.res <- list()
+adonis.summary <- list()
+for(i in 1:length(mice.complete)){
+  print(i)
+  res <- no.imp <- adonis2(dm.dist ~ age + ethnicity + bmi_class + alcohol_use + birth_country,
+                           data=data.frame(mice.complete[[i]]))
+  summary <- summarize.adonis(res)
+  summary$imputation <- i
+  adonis.res[[i]] <- res
+  adonis.summary[[i]] <- summary
+}
+```
+
+```{r}
+pooled.summary <- do.call(bind_rows, adonis.summary)
+write.table(pooled.summary, 
+            '~/Repositories/eurydice/eurydice/impute/tests/test_res.tsv',
+            sep='\t',
+            quote=FALSE)
+write.table(summarize.adonis(no.imp),
+            '~/Repositories/eurydice/eurydice/impute/tests/no_impute_res.tsv',
+            sep='\t',
+            quote=FALSE)
+```
