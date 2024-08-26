@@ -1,3 +1,10 @@
+# MAC stuff
+.DS_Store
+*/.DS_Store
+
+# Imputation_extras
+eurydice/impute/tests/dev_/mice_test/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
