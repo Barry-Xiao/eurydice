@@ -29,10 +29,10 @@ setup(name='eurydice',
       # maintainer="J W Debelius",
       # maintainer_email="jdebelius@ucsd.edu",
       packages=['eurydice',
-		'eurydice.impute',
-		'eurydice.impute.tests'
+            'eurydice.impute',
+		'eurydice.impute.tests',
 		'eurydice.plot'
-	       ],
+	     ],
       install_requires=['numpy >= 1.24.4',
 			'pandas >= 1.5.3',
 			'seaborn >= 0.12.2',
