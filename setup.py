@@ -38,7 +38,7 @@ setup(name='eurydice',
 			'seaborn >= 0.12.2',
 			'matplotlib >= 3.6.0',
 			'scipy >= 1.10.0',
-			'scikit-bio >= 0.5.8'
-                        'nose >= 1.3.7',
-                        ],
+			'scikit-bio >= 0.5.8',
+                  'nose >= 1.3.7',
+                  ],
       )
