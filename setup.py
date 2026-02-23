@@ -28,9 +28,17 @@ setup(name='eurydice',
       author_email="justine.debelius@jhu.edu",
       # maintainer="J W Debelius",
       # maintainer_email="jdebelius@ucsd.edu",
-      packages=['eurydice', 'eurydice.impute', 'eurydice.impute.tests'],
-      # install_requires=['numpy >= 1.10.0',
-                        # 'pandas >= 0.23.4',
-                        # 'nose >= 1.3.7',
-                        # ],
+      packages=['eurydice',
+		'eurydice.impute',
+		'eurydice.impute.tests'
+		'eurydice.plot'
+	       ],
+      install_requires=['numpy >= 1.24.4',
+			'pandas >= 1.5.3',
+			'seaborn >= 0.12.2',
+			'matplotlib >= 3.6.0',
+			'scipy >= 1.10.0',
+			'scikit-bio >= 0.5.8'
+                        'nose >= 1.3.7',
+                        ],
       )
